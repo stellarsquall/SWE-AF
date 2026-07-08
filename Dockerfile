@@ -89,6 +89,9 @@ RUN pip install --no-cache-dir uv
 COPY requirements-docker.txt /app/requirements.txt
 RUN uv pip install --system -r /app/requirements.txt
 
+# Install nautilus_trader
+RUN pip install --no-cache-dir nautilus_trader
+
 # Copy application code
 COPY . /app/
 
