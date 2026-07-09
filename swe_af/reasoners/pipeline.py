@@ -49,6 +49,66 @@ def _ensure_paths(base: str) -> dict[str, str]:
     return paths
 
 
+def _write_prd_md(prd: "PRD", path: str) -> None:
+    """Deterministically persist the parsed PRD to *path* as markdown.
+
+    Downstream agents (architect, reviewer) are instructed to READ the PRD from
+    this file. Relying on the PM agent's own ``Write`` tool to create it is flaky
+    on some runtimes — opencode/OpenRouter models satisfy the structured-output
+    schema but skip the file-write side-effect inconsistently. When the file is
+    missing, architecture review fails with "Cannot locate PRD document" and the
+    architect revision loop never converges (``result.parsed is None`` →
+    "Architect failed to produce a valid architecture"). Writing from the
+    validated object here makes the artifact handoff runtime-independent.
+    """
+    parts: list[str] = ["# Product Requirements Document"]
+    if prd.validated_description:
+        parts.append(f"## Description\n{prd.validated_description}")
+    if prd.must_have:
+        parts.append("## Must Have\n" + "\n".join(f"- {i}" for i in prd.must_have))
+    if prd.nice_to_have:
+        parts.append("## Nice to Have\n" + "\n".join(f"- {i}" for i in prd.nice_to_have))
+    if prd.acceptance_criteria:
+        parts.append("## Acceptance Criteria\n" + "\n".join(f"- {i}" for i in prd.acceptance_criteria))
+    if prd.out_of_scope:
+        parts.append("## Out of Scope\n" + "\n".join(f"- {i}" for i in prd.out_of_scope))
+    if prd.assumptions:
+        parts.append("## Assumptions\n" + "\n".join(f"- {i}" for i in prd.assumptions))
+    if prd.risks:
+        parts.append("## Risks\n" + "\n".join(f"- {i}" for i in prd.risks))
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+
+
+def _write_architecture_md(arch: "Architecture", path: str) -> None:
+    """Deterministically persist the parsed Architecture to *path* as markdown.
+
+    Same rationale as :func:`_write_prd_md` — make the artifact handoff to the
+    reviewer / sprint planner independent of the architect agent's ``Write``.
+    """
+    parts: list[str] = ["# Architecture"]
+    if arch.summary:
+        parts.append(f"## Summary\n{arch.summary}")
+    if arch.components:
+        parts.append("## Components")
+        for c in arch.components:
+            parts.append(f"### {c.name}\n{c.responsibility}")
+            if c.touches_files:
+                parts.append("Files: " + ", ".join(f"`{f}`" for f in c.touches_files))
+            if c.depends_on:
+                parts.append("Depends on: " + ", ".join(c.depends_on))
+    if arch.interfaces:
+        parts.append("## Interfaces\n" + "\n".join(f"- {i}" for i in arch.interfaces))
+    if arch.decisions:
+        parts.append("## Key Decisions")
+        for d in arch.decisions:
+            parts.append(f"- **{d.decision}**: {d.rationale}")
+    if arch.file_changes_overview:
+        parts.append(f"## File Changes Overview\n{arch.file_changes_overview}")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+
+
 def _compute_levels(issues: list[dict]) -> list[list[str]]:
     """Topological sort of issues into parallel execution levels (Kahn's algorithm).
 
@@ -233,6 +293,11 @@ async def run_product_manager(
     if parsed is None:
         raise RuntimeError("Product manager failed to produce a valid PRD")
 
+    # Persist prd.md deterministically so the architect/reviewer can always read
+    # it — do not depend on the PM agent's own Write tool firing (flaky on
+    # opencode/OpenRouter). See _write_prd_md.
+    _write_prd_md(parsed, paths["prd"])
+
     router.note("PM complete", tags=["pm", "complete"])
     return parsed.model_dump()
 
@@ -409,6 +474,9 @@ async def run_architect(
     check_fatal_harness_error(result)
     if result.parsed is None:
         raise RuntimeError("Architect failed to produce a valid architecture")
+
+    # Persist architecture.md deterministically (see _write_prd_md rationale).
+    _write_architecture_md(result.parsed, paths["architecture"])
 
     router.note("Architect complete", tags=["architect", "complete"])
     return result.parsed.model_dump()
