@@ -47,9 +47,18 @@ def approval_webhook_url(app: Any) -> str | None:
     Mirrors the URL the existing Phase 1.5 plan-approval gate uses
     (``{cp_base_url}/api/v1/webhooks/approval-response``). Returns ``None``
     when neither the app nor the env supplies a control-plane URL.
+
+    The HAX server calls this URL back when a human resolves the request, so it
+    MUST be reachable from HAX. In split deployments the agent reaches the
+    control plane over a private address (e.g. Railway's ``*.railway.internal``)
+    that HAX cannot resolve, which silently strands approvals (request completes
+    in HAX but the build stays ``waiting``). Set ``HAX_WEBHOOK_BASE_URL`` to the
+    control plane's PUBLIC base URL to override the internal agentfield_server
+    address for this callback only; internal agent<->CP comms are unaffected.
     """
     cp_base = (
-        getattr(app, "agentfield_server", None)
+        os.environ.get("HAX_WEBHOOK_BASE_URL")
+        or getattr(app, "agentfield_server", None)
         or os.environ.get("AGENTFIELD_SERVER")
         or ""
     ).rstrip("/")

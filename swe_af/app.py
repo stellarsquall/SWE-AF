@@ -770,7 +770,16 @@ async def build(
                 api_key=_hax_api_key,
                 base_url=os.environ.get("HAX_SDK_URL", "http://localhost:3000") + "/api/v1",
             )
-            cp_base_url = (app.agentfield_server or "http://localhost:8080").rstrip("/")
+            # HAX calls this URL back on approval, so it must be reachable from
+            # HAX. Prefer HAX_WEBHOOK_BASE_URL (the control plane's PUBLIC URL)
+            # over app.agentfield_server, which in split deployments is a private
+            # address (e.g. *.railway.internal) HAX cannot resolve — otherwise the
+            # approval completes in HAX but the build stays waiting forever.
+            cp_base_url = (
+                os.environ.get("HAX_WEBHOOK_BASE_URL")
+                or app.agentfield_server
+                or "http://localhost:8080"
+            ).rstrip("/")
             approval_state_path = os.path.join(abs_artifacts_dir, "approval_state.json")
             os.makedirs(os.path.dirname(approval_state_path), exist_ok=True)
             revision_history: list[dict] = []
