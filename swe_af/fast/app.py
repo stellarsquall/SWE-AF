@@ -29,6 +29,10 @@ app = Agent(
     description="Speed-optimized SWE agent — single-pass planning, sequential execution",
     agentfield_server=os.getenv("AGENTFIELD_SERVER", "http://localhost:8080"),
     api_key=os.getenv("AGENTFIELD_API_KEY"),
+    # See swe_af/app.py: DID registration needs the control plane to expose
+    # /api/v1/did/register. Off by default to avoid startup 404s; opt in via
+    # ENABLE_DID=1 when the control plane supports it.
+    enable_did=os.getenv("ENABLE_DID", "0").lower() in ("1", "true", "yes"),
 )
 
 app.include_router(fast_router)

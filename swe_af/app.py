@@ -56,6 +56,10 @@ app = Agent(
     description="Autonomous SWE planning pipeline",
     agentfield_server=os.getenv("AGENTFIELD_SERVER", "http://localhost:8080"),
     api_key=os.getenv("AGENTFIELD_API_KEY"),
+    # DID registration POSTs to /api/v1/did/register on the control plane. If
+    # that endpoint isn't exposed the SDK logs a 404 ("endpoint_not_found").
+    # Off by default; opt in via ENABLE_DID=1 when the control plane supports it.
+    enable_did=os.getenv("ENABLE_DID", "0").lower() in ("1", "true", "yes"),
 )
 
 app.include_router(router)
